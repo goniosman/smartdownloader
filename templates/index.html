@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Smart Video Downloader Pro</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            surface: {
+              900: '#0f172a',
+              950: '#020617',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #020617;
+      color: #f8fafc;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .video-card {
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .video-card:active {
+      transform: scale(0.98);
+    }
+    .video-card.selected {
+      border-color: #6366f1;
+      background: rgba(99, 102, 241, 0.12);
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.25);
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-surface-950 text-slate-100 min-h-screen flex flex-col selection:bg-brand-500 selection:text-white">
+
+  <!-- Navigation Bar -->
+  <nav class="sticky top-0 z-40 glass-panel border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-pink-500 flex items-center justify-center shadow-lg shadow-brand-500/30">
+          <i class="fa-solid fa-play text-white text-sm sm:text-lg"></i>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-base sm:text-xl font-bold bg-gradient-to-r from-white via-indigo-200 to-pink-300 bg-clip-text text-transparent">
+            Smart Downloader
+          </span>
+          <span class="text-[10px] sm:text-xs font-semibold px-1.5 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">PRO</span>
+        </div>
+      </div>
+
+      <!-- Header Action Items -->
+      <div class="flex items-center gap-2">
+        <!-- Direct Android APK Download Button (Visible on desktop/tablets) -->
+        <a 
+          href="/api/download_apk" 
+          download="SmartDownloader.apk" 
+          type="application/vnd.android.package-archive" 
+          id="apkDownloadBtn"
+          class="hidden sm:flex px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 transition items-center gap-1.5"
+          title="Download APK for Android phones"
+        >
+          <i class="fa-brands fa-android text-sm"></i>
+          <span>Download APK</span>
+        </a>
+
+        <!-- Check for Update Button -->
+        <button 
+          onclick="checkForAppUpdates(true)"
+          class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition flex items-center gap-1.5"
+          title="Check for software updates"
+        >
+          <i class="fa-solid fa-arrows-rotate text-brand-400"></i>
+          <span class="hidden sm:inline">Update</span>
+        </button>
+
+        <!-- Local Mobile Wi-Fi Access Pill (Desktop only) -->
+        <div class="hidden lg:flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
+          <i class="fa-solid fa-mobile-screen text-emerald-400"></i>
+          <span class="text-slate-400">Mobile Wi-Fi:</span>
+          <code id="localIpPill" class="text-emerald-300 font-mono font-semibold">http://{{ local_ip }}:5000</code>
+          <button onclick="copyToClipboard('http://{{ local_ip }}:5000')" title="Copy URL" class="text-slate-400 hover:text-white ml-1">
+            <i class="fa-regular fa-copy"></i>
+          </button>
+        </div>
+
+        <!-- Open PC Folder Button (Desktop only) -->
+        <button onclick="openFolder()" id="openPcFolderBtn" class="hidden md:flex px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium border border-slate-700 transition items-center gap-1.5" title="Open Download Folder">
+          <i class="fa-regular fa-folder-open text-amber-400"></i>
+          <span>Folder</span>
+        </button>
+
+        <!-- Settings Button -->
+        <button 
+          onclick="handleSettingsClick()"
+          id="appSettingsBtn" 
+          class="p-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-300 transition text-sm flex items-center justify-center"
+          title="Settings"
+        >
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-5">
+
+    <!-- Top Platform Pills -->
+    <div class="flex flex-wrap items-center justify-between gap-2.5 text-xs text-slate-400">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-medium text-slate-300">Supported:</span>
+        <span class="px-2 py-0.5 rounded-md bg-red-500/10 text-red-400 border border-red-500/20 flex items-center gap-1">
+          <i class="fa-brands fa-youtube"></i> YouTube
+        </span>
+        <span class="px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center gap-1">
+          <i class="fa-brands fa-tiktok"></i> TikTok (No Watermark)
+        </span>
+        <span class="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center gap-1">
+          <i class="fa-brands fa-facebook"></i> Facebook
+        </span>
+        <span class="px-2 py-0.5 rounded-md bg-pink-500/10 text-pink-400 border border-pink-500/20 flex items-center gap-1">
+          <i class="fa-solid fa-tv"></i> Bilibili
+        </span>
+      </div>
+
+      {% if ffmpeg_active %}
+      <div class="text-emerald-400 text-xs flex items-center gap-1 font-medium">
+        <i class="fa-solid fa-circle-check"></i>
+        <span>FFmpeg Ready (1080p/4K)</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Online Everywhere Banner (Cloudflare Tunnel) -->
+    <div id="tunnelBanner" class="p-3 rounded-xl bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-brand-950/80 border border-indigo-500/30 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="font-semibold text-slate-200">Online Everywhere (Mobile Data & Other Wi-Fi):</span>
+        <span id="tunnelUrlText" class="font-mono text-indigo-300 break-all select-all">{{ public_tunnel_url or "Connecting tunnel..." }}</span>
+      </div>
+      <div class="flex items-center gap-2 self-end sm:self-auto">
+        <button onclick="copyTunnelUrl()" class="px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 font-medium transition active:scale-95 flex items-center gap-1.5" title="Copy public URL to use on Mobile Data">
+          <i class="fa-regular fa-copy"></i>
+          <span>Copy Online Link</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Search / Input Card -->
+    <div class="glass-panel rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4">
+      <div>
+        <label for="urlInput" class="block text-xs sm:text-sm font-semibold text-slate-200 mb-2">
+          Enter Channel, Profile, Playlist, or Video URL:
+        </label>
+        <div class="relative flex items-center">
+          <input
+            type="text"
+            id="urlInput"
+            placeholder="https://www.youtube.com/@channel, TikTok URL, Facebook, Bilibili..."
+            class="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl py-3 pl-3.5 pr-20 text-white text-xs sm:text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition shadow-inner"
+          />
+          <div class="absolute right-1.5 flex items-center gap-1">
+            <button onclick="pasteClipboard()" class="p-2 text-slate-400 hover:text-white transition active:scale-95" title="Paste from clipboard">
+              <i class="fa-regular fa-paste text-sm"></i>
+            </button>
+            <button onclick="clearInput()" class="p-2 text-slate-400 hover:text-red-400 transition active:scale-95" title="Clear input">
+              <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-400/90 flex items-center gap-1.5 pt-0.5">
+          <i class="fa-solid fa-circle-info text-indigo-400 text-xs"></i>
+          <span>Supports single links, entire channels/pages, or multiple video/reel links pasted together!</span>
+        </p>
+      </div>
+
+      <!-- Filters & Options Row -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1 border-t border-slate-800">
+        <!-- Video Type -->
+        <div>
+          <label class="block text-[11px] font-medium text-slate-400 mb-1">Video Type</label>
+          <select id="kindSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:ring-1 focus:ring-brand-500">
+            <option value="both" selected>Both (Shorts + Long Videos)</option>
+            <option value="short">Shorts / Reels Only</option>
+            <option value="long">Long Videos Only</option>
+          </select>
+        </div>
+
+        <!-- Scan Limit -->
+        <div>
+          <label class="block text-[11px] font-medium text-slate-400 mb-1">Scan Limit</label>
+          <select id="limitSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:ring-1 focus:ring-brand-500">
+            <option value="15">15 Videos</option>
+            <option value="30" selected>30 Videos</option>
+            <option value="50">50 Videos</option>
+            <option value="100">100 Videos</option>
+            <option value="0">All Videos (Unlimited)</option>
+          </select>
+        </div>
+
+        <!-- Cookies (Optional) -->
+        <div>
+          <label class="block text-[11px] font-medium text-slate-400 mb-1">Browser Cookies (Optional)</label>
+          <select id="cookieSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:ring-1 focus:ring-brand-500">
+            <option value="none" selected>None</option>
+            <option value="chrome">Chrome</option>
+            <option value="edge">Edge</option>
+            <option value="firefox">Firefox</option>
+          </select>
+        </div>
+
+        <!-- Scan Action Button -->
+        <div class="flex items-end">
+          <button
+            id="scanBtn"
+            onclick="startScan()"
+            class="w-full bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold py-2 px-4 rounded-xl shadow-lg shadow-brand-500/25 transition duration-200 flex items-center justify-center gap-2 text-xs sm:text-sm disabled:opacity-50 active:scale-95"
+          >
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <span>Scan & List Videos</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Save Location (Save as) Row -->
+      <div id="saveLocationRow" class="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div class="flex-1 flex items-center gap-2">
+          <span class="text-xs font-semibold text-slate-300 whitespace-nowrap flex items-center gap-1">
+            <i class="fa-regular fa-floppy-disk text-indigo-400"></i> Save Folder:
+          </span>
+          <input
+            type="text"
+            id="saveFolderInput"
+            value="{{ default_folder }}"
+            placeholder="Destination folder..."
+            class="w-full bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 font-mono focus:ring-1 focus:ring-brand-500 focus:outline-none"
+          />
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            onclick="browseFolder()"
+            class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5"
+            title="Browse folder from computer"
+          >
+            <i class="fa-regular fa-folder text-amber-400"></i>
+            <span>Browse</span>
+          </button>
+          <button
+            type="button"
+            onclick="openFolder()"
+            class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5"
+            title="Open folder in File Explorer"
+          >
+            <i class="fa-regular fa-folder-open text-emerald-400"></i>
+            <span>Open</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingState" class="hidden glass-panel rounded-2xl p-10 text-center space-y-4">
+      <div class="inline-block relative w-12 h-12">
+        <div class="w-12 h-12 rounded-full border-4 border-slate-700 border-t-brand-500 animate-spin"></div>
+      </div>
+      <h3 class="text-base font-semibold text-slate-200" id="loadingTitle">Scanning Link...</h3>
+      <p class="text-xs text-slate-400 max-w-md mx-auto" id="loadingSubtitle">Fetching video information, please wait...</p>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="hidden space-y-4 pb-24 md:pb-6">
+
+      <!-- Channel Info & Top Desktop Action Bar -->
+      <div class="glass-panel rounded-2xl p-3 sm:p-4 flex flex-col md:flex-row items-center justify-between gap-3 md:sticky md:top-20 z-20 shadow-xl border border-slate-700/80">
+        
+        <!-- Left: Channel Info & Selection Counter -->
+        <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+          <div class="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="selectAllCheckbox"
+              onchange="toggleSelectAll(this.checked)"
+              class="w-4 h-4 rounded border-slate-700 text-brand-600 focus:ring-brand-500 cursor-pointer bg-slate-900"
+            />
+            <label for="selectAllCheckbox" class="text-xs sm:text-sm font-semibold cursor-pointer select-none">Select All</label>
+          </div>
+          <div class="h-4 w-px bg-slate-700"></div>
+          <div class="text-xs text-slate-300">
+            <span class="font-bold text-brand-400 text-sm" id="selectedCount">0</span>/<span id="totalFoundCount">0</span> selected
+          </div>
+          <div class="hidden lg:block text-xs text-slate-400 truncate max-w-xs font-medium" id="channelHeaderTitle">
+            <!-- Channel title dynamically loaded -->
+          </div>
+        </div>
+
+        <!-- Right: Quality Selector & Desktop Download Button -->
+        <div class="hidden md:flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+          <div class="flex items-center gap-1.5 text-xs text-slate-400">
+            <label for="qualitySelect">Quality:</label>
+            <select id="qualitySelect" onchange="syncQuality(this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:ring-1 focus:ring-brand-500">
+              <option value="best" selected>🎬 Best Quality (1080p/4K)</option>
+              <option value="720p">720p HD</option>
+              <option value="480p">480p SD</option>
+              <option value="audio_mp3">🎵 Audio Only (MP3)</option>
+            </select>
+          </div>
+
+          <button
+            id="downloadSelectedBtn"
+            onclick="downloadSelectedVideos()"
+            class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold py-1.5 px-4 rounded-xl shadow-lg shadow-emerald-500/25 transition text-xs sm:text-sm flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <i class="fa-solid fa-cloud-arrow-down"></i>
+            <span>Download Selected (<span id="btnSelectedCount">0</span>)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile Floating Bottom Action Dock -->
+      <div id="mobileBottomDock" class="md:hidden fixed bottom-4 inset-x-3 z-40 transition-all duration-300 transform translate-y-28 opacity-0 pointer-events-none">
+        <div class="glass-panel bg-slate-900/95 backdrop-blur-xl border border-indigo-500/50 rounded-2xl p-2.5 shadow-2xl flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 pl-2">
+            <span class="w-6 h-6 rounded-full bg-brand-500/30 text-brand-300 font-bold text-xs flex items-center justify-center border border-brand-500/50" id="mobileSelectedCount">0</span>
+            <span class="text-xs font-semibold text-slate-200">Selected</span>
+          </div>
+          
+          <div class="flex items-center gap-2">
+            <select id="mobileQualitySelect" onchange="syncQuality(this.value)" class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:ring-1 focus:ring-brand-500">
+              <option value="best" selected>1080p/4K</option>
+              <option value="720p">720p HD</option>
+              <option value="480p">480p</option>
+              <option value="audio_mp3">Audio (MP3)</option>
+            </select>
+            
+            <button onclick="downloadSelectedVideos()" class="bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold py-1.5 px-3.5 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-600/30 active:scale-95 transition">
+              <i class="fa-solid fa-cloud-arrow-down"></i>
+              <span>Download (<span id="mobileBtnCount">0</span>)</span>
+            </button>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-400/90 flex items-center gap-1.5 pt-0.5">
+          <i class="fa-solid fa-circle-info text-indigo-400 text-xs"></i>
+          <span>Supports single links, entire channels/pages, or multiple video/reel links pasted together!</span>
+        </p>
+      </div>
+
+      <!-- Video Grid -->
+      <div id="videoGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        <!-- Dynamic Video Cards Inserted Here -->
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Download Progress Modal -->
+  <div id="progressModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div class="glass-panel bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-4 sm:p-6 space-y-4 shadow-2xl relative">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <i class="fa-solid fa-download"></i>
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-white">Downloading</h3>
+            <p class="text-xs text-slate-400" id="progressStatusText">Starting...</p>
+          </div>
+        </div>
+        <button onclick="cancelActiveDownload()" class="text-xs text-red-400 hover:text-red-300 font-semibold px-2.5 py-1 rounded-md bg-red-500/10 border border-red-500/20 transition">
+          <i class="fa-solid fa-stop mr-1"></i>Cancel
+        </button>
+      </div>
+
+      <!-- Current Video Info -->
+      <div class="space-y-2">
+        <p class="text-xs font-semibold text-slate-300 truncate" id="currentDownloadingTitle">Video title...</p>
+        
+        <!-- Progress Bar -->
+        <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5 border border-slate-700/80">
+          <div
+            id="progressBarFill"
+            class="bg-gradient-to-r from-brand-500 via-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-200"
+            style="width: 0%"
+          ></div>
+        </div>
+
+        <!-- Metrics Row -->
+        <div class="flex items-center justify-between text-[11px] sm:text-xs text-slate-400 font-mono pt-1">
+          <span id="percentText" class="font-bold text-emerald-400">0%</span>
+          <span id="speedText">-- MB/s</span>
+          <span id="sizeText">0 / 0 MB</span>
+          <span id="etaText">ETA: --s</span>
+        </div>
+      </div>
+
+      <!-- Overall Progress Counter -->
+      <div class="bg-slate-950/60 rounded-xl p-2.5 border border-slate-800/80 text-xs flex justify-between items-center text-slate-300">
+        <span>Total Progress:</span>
+        <span class="font-bold text-brand-400" id="overallCounter">0 / 0 Completed</span>
+      </div>
+
+      <!-- Completed Files List (Device Transfer Section) -->
+      <div id="completedFilesSection" class="hidden space-y-2 max-h-48 overflow-y-auto pr-1">
+        <div class="flex items-center justify-between">
+          <p class="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-circle-check"></i> Completed Videos:
+          </p>
+          <button 
+            type="button" 
+            onclick="downloadAllCompletedFiles()" 
+            class="px-2.5 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1 transition active:scale-95"
+          >
+            <i class="fa-solid fa-cloud-arrow-down"></i> Save All to Phone
+          </button>
+        </div>
+        <div id="completedFilesList" class="space-y-1.5 text-xs">
+          <!-- Download Links for Mobile/Browser -->
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+        <button id="closeModalBtn" onclick="closeProgressModal()" class="hidden px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Update Modal -->
+  <div id="updateModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-panel bg-slate-900 border border-brand-500/40 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl relative">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-pink-500 flex items-center justify-center text-white text-base shadow-lg shadow-brand-500/30">
+          <i class="fa-solid fa-cloud-arrow-down"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-bold text-white">App Update Available</h3>
+            <span class="px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 text-[11px] font-bold border border-brand-500/30" id="updateVersionBadge">v1.0.0</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5" id="updateChangelog">Improvements and bug fixes.</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-950/70 rounded-xl p-3 border border-slate-800 text-xs text-slate-300 space-y-1">
+        <div class="flex justify-between">
+          <span class="text-slate-400">Release Date:</span>
+          <span class="font-mono text-slate-200" id="updateReleaseDate">--</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2">
+        <button onclick="closeUpdateModal()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">
+          Later
+        </button>
+        <a 
+          href="/api/download_apk" 
+          download="SmartDownloader.apk" 
+          type="application/vnd.android.package-archive"
+          class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 flex items-center gap-1.5 transition active:scale-95"
+        >
+          <i class="fa-brands fa-android"></i>
+          <span>Update Now</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal (Save As Location & Preferences) -->
+  <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-panel bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+            <i class="fa-solid fa-gear"></i>
+          </div>
+          <h3 class="text-base font-bold text-white">Settings & Save As</h3>
+        </div>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- Save Location Option -->
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold text-slate-200">
+          <i class="fa-regular fa-folder-open text-amber-400 mr-1"></i> Default Save Location (Save As):
+        </label>
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            id="settingsFolderInput"
+            value="{{ default_folder }}"
+            class="flex-1 bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:ring-1 focus:ring-brand-500 focus:outline-none"
+          />
+          <button
+            type="button"
+            onclick="browseFolderForSettings()"
+            class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition"
+          >
+            Browse
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-400">
+          💡 On PC, files download to this folder. On Mobile, files are saved directly into your phone's <b>Downloads</b> folder.
+        </p>
+      </div>
+
+      <div class="border-t border-slate-800 pt-2 space-y-2">
+        <label class="block text-xs font-semibold text-slate-200">
+          <i class="fa-solid fa-wifi text-emerald-400 mr-1"></i> Mobile Wi-Fi Server IP:
+        </label>
+        <div class="flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+          <code class="text-emerald-300 font-mono font-semibold">http://{{ local_ip }}:5000</code>
+          <button onclick="copyToClipboard('http://{{ local_ip }}:5000')" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300">
+            Copy
+          </button>
+        </div>
+      </div>
+
+      <div class="border-t border-slate-800 pt-2 flex items-center justify-between text-xs text-slate-300">
+        <span>App Version: <b class="text-brand-400 font-mono">v1.1.0</b></span>
+        <button onclick="checkForAppUpdates(true)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] text-brand-300">
+          <i class="fa-solid fa-arrows-rotate mr-1"></i> Check Update
+        </button>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+        <button onclick="saveSettingsAndClose()" class="w-full sm:w-auto px-4 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold transition active:scale-95">
+          Save Settings
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Main JavaScript Logic -->
+  <script>
+    let scannedVideos = [];
+    let selectedVideoIds = new Set();
+    let currentTaskId = null;
+    let pollInterval = null;
+    let transferredFileIds = new Set();
+    let currentCompletedFiles = [];
+
+    // Toast Notification System
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      let bg = 'bg-slate-800 border-slate-700 text-slate-200';
+      let icon = '<i class="fa-solid fa-circle-info text-blue-400"></i>';
+      
+      if (type === 'success') {
+        bg = 'bg-slate-900/95 border-emerald-500/40 text-emerald-300 shadow-emerald-500/20';
+        icon = '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+      } else if (type === 'error') {
+        bg = 'bg-slate-900/95 border-red-500/40 text-red-300 shadow-red-500/20';
+        icon = '<i class="fa-solid fa-triangle-exclamation text-red-400"></i>';
+      }
+
+      toast.className = `flex items-center gap-2.5 px-4 py-2.5 rounded-xl border shadow-xl text-xs font-medium transition-all duration-300 transform translate-y-3 opacity-0 pointer-events-auto ${bg}`;
+      toast.innerHTML = `${icon} <span>${escapeHtml(message)}</span>`;
+
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.remove('translate-y-3', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-3');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function copyToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showToast('Address copied to clipboard', 'success'));
+      } else {
+        const inp = document.createElement('input');
+        inp.value = text;
+        document.body.appendChild(inp);
+        inp.select();
+        document.execCommand('copy');
+        document.body.removeChild(inp);
+        showToast('Address copied to clipboard', 'success');
+      }
+    }
+
+    async function pasteClipboard() {
+      // First check if inside native Android App
+      if (window.AndroidApp && window.AndroidApp.pasteClipboard) {
+        window.AndroidApp.pasteClipboard();
+        return;
+      }
+      try {
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const text = await navigator.clipboard.readText();
+          if (text) document.getElementById('urlInput').value = text.trim();
+        } else {
+          showToast('Long-press input box to paste', 'info');
+        }
+      } catch (err) {
+        showToast('Long-press input box to paste', 'info');
+      }
+    }
+
+    function clearInput() {
+      document.getElementById('urlInput').value = '';
+    }
+
+    function copyTunnelUrl() {
+      const el = document.getElementById('tunnelUrlText');
+      const text = el ? el.innerText.trim() : '';
+      if (text && text.startsWith('http')) {
+        navigator.clipboard.writeText(text);
+        showToast('Online link copied! Use this link from mobile data or any Wi-Fi.', 'success');
+      } else {
+        showToast('Tunnel link is still connecting, please wait a moment...', 'info');
+      }
+    }
+
+    // Refresh tunnel URL if initially connecting
+    async function checkTunnelStatus() {
+      try {
+        const resp = await fetch('/api/system_info');
+        const data = await resp.json();
+        if (data && data.public_tunnel_url) {
+          const el = document.getElementById('tunnelUrlText');
+          if (el) el.innerText = data.public_tunnel_url;
+        }
+      } catch (e) {}
+    }
+    setInterval(checkTunnelStatus, 5000);
+
+    function handleSettingsClick() {
+      if (window.AndroidApp && window.AndroidApp.openSettings) {
+        window.AndroidApp.openSettings();
+      } else {
+        openSettingsModal();
+      }
+    }
+
+    function openSettingsModal() {
+      document.getElementById('settingsModal').classList.remove('hidden');
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').classList.add('hidden');
+    }
+
+    async function browseFolderForSettings() {
+      try {
+        const resp = await fetch('/api/browse_folder', { method: 'POST' });
+        const data = await resp.json();
+        if (data.folder) {
+          document.getElementById('settingsFolderInput').value = data.folder;
+          document.getElementById('saveFolderInput').value = data.folder;
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+
+    async function saveSettingsAndClose() {
+      const folder = document.getElementById('settingsFolderInput').value.trim();
+      if (folder) {
+        document.getElementById('saveFolderInput').value = folder;
+        try {
+          await fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ download_folder: folder })
+          });
+          showToast('Save location updated successfully', 'success');
+        } catch (e) {
+          showToast('Save location updated', 'info');
+        }
+      }
+      closeSettingsModal();
+    }
+
+    // 1. Scan Videos API
+    async function startScan() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) {
+        showToast('Please enter a valid video or channel URL', 'error');
+        return;
+      }
+
+      const kind = document.getElementById('kindSelect').value;
+      const limit = parseInt(document.getElementById('limitSelect').value) || 50;
+      const cookies = document.getElementById('cookieSelect').value;
+
+      document.getElementById('loadingState').classList.remove('hidden');
+      document.getElementById('resultsSection').classList.add('hidden');
+      document.getElementById('scanBtn').disabled = true;
+
+      try {
+        const resp = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, kind, limit, cookies })
+        });
+
+        if (!resp.ok) {
+          const errData = await resp.json();
+          throw new Error(errData.detail || 'Failed to scan URL');
+        }
+
+        const data = await resp.json();
+        if (!data.videos || data.videos.length === 0) {
+          showToast('No downloadable videos found for this URL', 'error');
+          return;
+        }
+
+        scannedVideos = data.videos;
+        selectedVideoIds.clear();
+
+        // Default: select all
+        scannedVideos.forEach(v => selectedVideoIds.add(v.id));
+        document.getElementById('selectAllCheckbox').checked = true;
+
+        renderVideos(scannedVideos, data.title);
+        showToast(`Found ${scannedVideos.length} videos!`, 'success');
+      } catch (err) {
+        showToast('Scan error: ' + err.message, 'error');
+      } finally {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('scanBtn').disabled = false;
+      }
+    }
+
+    // 2. Render Videos in Cards
+    function renderVideos(videos, title) {
+      const grid = document.getElementById('videoGrid');
+      grid.innerHTML = '';
+
+      document.getElementById('totalFoundCount').innerText = videos.length;
+      document.getElementById('channelHeaderTitle').innerText = title || '';
+      updateSelectionUI();
+
+      videos.forEach((video) => {
+        const isSelected = selectedVideoIds.has(video.id);
+        const card = document.createElement('div');
+        card.className = `video-card glass-panel rounded-2xl overflow-hidden border border-slate-800 cursor-pointer relative group flex flex-col justify-between ${isSelected ? 'selected' : ''}`;
+        card.id = `card-${video.id}`;
+        card.onclick = (e) => {
+          if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'I') {
+            toggleVideoSelection(video.id);
+          }
+        };
+
+        const platformBadge = getPlatformBadge(video.platform);
+        const durationDisplay = (video.duration_str && video.duration_str !== 'Short')
+          ? `<span class="bg-black/85 text-white text-[10px] font-mono font-semibold px-2 py-0.5 rounded shadow">${video.duration_str}</span>`
+          : (video.type === 'short' ? '<span class="bg-gradient-to-r from-pink-600 to-rose-600 text-white font-bold text-[10px] px-2 py-0.5 rounded shadow">⚡ Short</span>' : '');
+
+        card.innerHTML = `
+          <!-- Thumbnail Container -->
+          <div class="relative aspect-video w-full bg-slate-900 overflow-hidden">
+            <img 
+              src="${video.thumbnail}" 
+              alt="${escapeHtml(video.title)}" 
+              loading="lazy" 
+              class="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+              onerror="this.src='/static/default_thumb.svg'"
+            />
+            
+            <!-- Checkmark Indicator -->
+            <div class="absolute top-2.5 right-2.5 z-10">
+              <div class="check-pill w-7 h-7 rounded-full flex items-center justify-center transition shadow-lg ${isSelected ? 'bg-indigo-600 text-white ring-2 ring-indigo-400' : 'bg-slate-950/70 border border-white/40 text-transparent'}">
+                <i class="fa-solid fa-check text-xs"></i>
+              </div>
+            </div>
+
+            <!-- Duration Badge -->
+            <div class="absolute bottom-2.5 right-2.5 flex items-center gap-1 z-10">
+              ${durationDisplay}
+            </div>
+
+            <!-- Platform Icon -->
+            <div class="absolute top-2.5 left-2.5 z-10">
+              ${platformBadge}
+            </div>
+          </div>
+
+          <!-- Card Body -->
+          <div class="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
+            <h4 class="text-xs sm:text-sm font-semibold text-slate-200 line-clamp-2 leading-snug" title="${escapeHtml(video.title)}">
+              ${escapeHtml(video.title)}
+            </h4>
+            
+            <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
+              <span class="truncate max-w-[130px] font-medium">${escapeHtml(video.uploader || 'Creator')}</span>
+              <button 
+                onclick="event.stopPropagation(); downloadSingleDirect('${escapeHtml(video.url)}', '${escapeHtml(video.title)}')"
+                class="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition active:scale-95"
+                title="Download this video"
+              >
+                <i class="fa-solid fa-arrow-down text-[10px]"></i>
+                <span>Download</span>
+              </button>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      document.getElementById('resultsSection').classList.remove('hidden');
+    }
+
+    function getPlatformBadge(platform) {
+      if (platform === 'youtube') {
+        return '<span class="bg-red-600 text-white px-1.5 py-0.5 rounded text-xs shadow flex items-center"><i class="fa-brands fa-youtube"></i></span>';
+      } else if (platform === 'tiktok') {
+        return '<span class="bg-cyan-600 text-white px-1.5 py-0.5 rounded text-xs shadow flex items-center"><i class="fa-brands fa-tiktok"></i></span>';
+      } else if (platform === 'facebook') {
+        return '<span class="bg-blue-600 text-white px-1.5 py-0.5 rounded text-xs shadow flex items-center"><i class="fa-brands fa-facebook"></i></span>';
+      } else if (platform === 'bilibili') {
+        return '<span class="bg-pink-600 text-white px-1.5 py-0.5 rounded text-xs shadow flex items-center"><i class="fa-solid fa-tv"></i></span>';
+      }
+      return '<span class="bg-slate-700 text-white px-1.5 py-0.5 rounded text-xs"><i class="fa-solid fa-play"></i></span>';
+    }
+
+    function toggleVideoSelection(vid) {
+      const el = document.getElementById(`card-${vid}`);
+      if (selectedVideoIds.has(vid)) {
+        selectedVideoIds.delete(vid);
+        if (el) {
+          el.classList.remove('selected');
+          const pill = el.querySelector('.check-pill');
+          if (pill) pill.className = 'check-pill w-7 h-7 rounded-full flex items-center justify-center transition shadow-lg bg-slate-950/70 border border-white/40 text-transparent';
+        }
+      } else {
+        selectedVideoIds.add(vid);
+        if (el) {
+          el.classList.add('selected');
+          const pill = el.querySelector('.check-pill');
+          if (pill) pill.className = 'check-pill w-7 h-7 rounded-full flex items-center justify-center transition shadow-lg bg-indigo-600 text-white ring-2 ring-indigo-400';
+        }
+      }
+      updateSelectionUI();
+    }
+
+    function toggleSelectAll(select) {
+      if (select) {
+        scannedVideos.forEach(v => {
+          selectedVideoIds.add(v.id);
+          const el = document.getElementById(`card-${v.id}`);
+          if (el) {
+            el.classList.add('selected');
+            const pill = el.querySelector('.check-pill');
+            if (pill) pill.className = 'check-pill w-7 h-7 rounded-full flex items-center justify-center transition shadow-lg bg-indigo-600 text-white ring-2 ring-indigo-400';
+          }
+        });
+      } else {
+        selectedVideoIds.clear();
+        scannedVideos.forEach(v => {
+          const el = document.getElementById(`card-${v.id}`);
+          if (el) {
+            el.classList.remove('selected');
+            const pill = el.querySelector('.check-pill');
+            if (pill) pill.className = 'check-pill w-7 h-7 rounded-full flex items-center justify-center transition shadow-lg bg-slate-950/70 border border-white/40 text-transparent';
+          }
+        });
+      }
+      updateSelectionUI();
+    }
+
+    function syncQuality(val) {
+      const q1 = document.getElementById('qualitySelect');
+      const q2 = document.getElementById('mobileQualitySelect');
+      if (q1 && q1.value !== val) q1.value = val;
+      if (q2 && q2.value !== val) q2.value = val;
+    }
+
+    function updateSelectionUI() {
+      const count = selectedVideoIds.size;
+      document.getElementById('selectedCount').innerText = count;
+      document.getElementById('btnSelectedCount').innerText = count;
+      
+      const mCount = document.getElementById('mobileSelectedCount');
+      if (mCount) mCount.innerText = count;
+      const mBtnCount = document.getElementById('mobileBtnCount');
+      if (mBtnCount) mBtnCount.innerText = count;
+
+      const btn = document.getElementById('downloadSelectedBtn');
+      if (btn) btn.disabled = count === 0;
+
+      const allCb = document.getElementById('selectAllCheckbox');
+      if (allCb) allCb.checked = (count === scannedVideos.length && scannedVideos.length > 0);
+
+      const dock = document.getElementById('mobileBottomDock');
+      if (dock) {
+        if (count > 0) {
+          dock.classList.remove('translate-y-28', 'opacity-0', 'pointer-events-none');
+          dock.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+        } else {
+          dock.classList.add('translate-y-28', 'opacity-0', 'pointer-events-none');
+          dock.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+        }
+      }
+    }
+
+    // 3. Batch & Single Download
+    async function downloadSelectedVideos() {
+      if (selectedVideoIds.size === 0) {
+        showToast('Please select at least one video', 'error');
+        return;
+      }
+
+      const items = scannedVideos
+        .filter(v => selectedVideoIds.has(v.id))
+        .map(v => ({ url: v.url, title: v.title }));
+
+      const qEl = document.getElementById('qualitySelect') || document.getElementById('mobileQualitySelect');
+      const quality = qEl ? qEl.value : 'best';
+      const cookies = document.getElementById('cookieSelect').value;
+      const output_dir = document.getElementById('saveFolderInput').value.trim() || null;
+
+      try {
+        const resp = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items, quality, cookies, output_dir })
+        });
+        const data = await resp.json();
+        if (data.task_id) {
+          openProgressModal(data.task_id, items.length);
+        }
+      } catch (err) {
+        showToast('Failed to start download: ' + err.message, 'error');
+      }
+    }
+
+    async function downloadSingleDirect(url, title) {
+      const qEl = document.getElementById('qualitySelect') || document.getElementById('mobileQualitySelect');
+      const quality = qEl ? qEl.value : 'best';
+      const cookies = document.getElementById('cookieSelect').value;
+      const output_dir = document.getElementById('saveFolderInput').value.trim() || null;
+      try {
+        const resp = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: [{ url, title }], quality, cookies, output_dir })
+        });
+        const data = await resp.json();
+        if (data.task_id) {
+          openProgressModal(data.task_id, 1);
+        }
+      } catch (err) {
+        showToast('Failed to start download', 'error');
+      }
+    }
+
+    // Direct Browser / Mobile Download Trigger
+    function saveFileToDevice(url, filename) {
+      let targetUrl = url;
+      try {
+        // Resolve URL relative to the current window location (works seamlessly on Wi-Fi and Mobile Data)
+        targetUrl = new URL(url, window.location.origin).href;
+      } catch (e) {
+        targetUrl = url;
+      }
+      if (window.AndroidApp && typeof window.AndroidApp.downloadFile === 'function') {
+        window.AndroidApp.downloadFile(targetUrl, filename || 'video.mp4');
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = targetUrl;
+      if (filename) link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) link.parentNode.removeChild(link);
+      }, 500);
+    }
+
+    function downloadAllCompletedFiles() {
+      if (!currentCompletedFiles || currentCompletedFiles.length === 0) return;
+      currentCompletedFiles.forEach((f, idx) => {
+        setTimeout(() => {
+          saveFileToDevice(f.download_url || f.full_download_url, f.filename);
+        }, idx * 600);
+      });
+      showToast(`Saving ${currentCompletedFiles.length} videos to phone...`, 'success');
+    }
+
+    // 4. Progress Tracking
+    function openProgressModal(taskId, total) {
+      currentTaskId = taskId;
+      transferredFileIds.clear();
+      currentCompletedFiles = [];
+      document.getElementById('progressModal').classList.remove('hidden');
+      document.getElementById('progressBarFill').style.width = '0%';
+      document.getElementById('percentText').innerText = '0%';
+      document.getElementById('overallCounter').innerText = `0 / ${total} Completed`;
+      document.getElementById('closeModalBtn').classList.add('hidden');
+      document.getElementById('completedFilesSection').classList.add('hidden');
+      document.getElementById('completedFilesList').innerHTML = '';
+
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(() => pollProgress(taskId), 800);
+    }
+
+    async function pollProgress(taskId) {
+      try {
+        const resp = await fetch(`/api/progress/${taskId}`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        document.getElementById('currentDownloadingTitle').innerText = `[${data.current_index}/${data.total}] ${data.current_title || 'Downloading...'}`;
+        document.getElementById('progressStatusText').innerText = data.status === 'downloading' ? 'Downloading...' : data.status;
+
+        const pct = data.current_percent || 0;
+        document.getElementById('progressBarFill').style.width = `${pct}%`;
+        document.getElementById('percentText').innerText = `${pct}%`;
+        document.getElementById('speedText').innerText = `${data.speed_mb || 0} MB/s`;
+        document.getElementById('sizeText').innerText = `${data.downloaded_mb || 0} / ${data.total_mb || 0} MB`;
+        document.getElementById('etaText').innerText = `ETA: ${data.eta_sec || 0}s`;
+
+        document.getElementById('overallCounter').innerText = `${data.completed_count} / ${data.total} Completed (Failed: ${data.failed_count})`;
+
+        if (data.completed_files && data.completed_files.length > 0) {
+          currentCompletedFiles = data.completed_files;
+          const fileSection = document.getElementById('completedFilesSection');
+          fileSection.classList.remove('hidden');
+          
+          // Auto-trigger download to device as each file completes
+          data.completed_files.forEach(f => {
+            if (!transferredFileIds.has(f.id)) {
+              transferredFileIds.add(f.id);
+              saveFileToDevice(f.download_url || f.full_download_url, f.filename);
+              showToast(`Saved to phone: ${f.title.substring(0, 30)}...`, 'success');
+            }
+          });
+
+          const fileList = document.getElementById('completedFilesList');
+          fileList.innerHTML = data.completed_files.map(f => `
+            <div class="flex items-center justify-between p-2 rounded-xl bg-slate-800/90 border border-slate-700/60 gap-2">
+              <span class="truncate max-w-[200px] sm:max-w-[280px] font-medium text-slate-200 text-xs">${escapeHtml(f.title)}</span>
+              <button 
+                onclick="saveFileToDevice('${f.download_url || f.full_download_url}', '${escapeHtml(f.filename)}')" 
+                class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] flex items-center gap-1 transition shadow active:scale-95 whitespace-nowrap"
+              >
+                <i class="fa-solid fa-arrow-down"></i> Save to Phone
+              </button>
+            </div>
+          `).join('');
+        }
+
+        if (data.status === 'completed' || data.status === 'canceled') {
+          clearInterval(pollInterval);
+          document.getElementById('progressStatusText').innerText = data.message || 'Operation finished!';
+          document.getElementById('closeModalBtn').classList.remove('hidden');
+          showToast(data.message || 'Download completed!', data.status === 'completed' ? 'success' : 'info');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function cancelActiveDownload() {
+      if (!currentTaskId) return;
+      try {
+        await fetch(`/api/cancel/${currentTaskId}`, { method: 'POST' });
+        showToast('Canceling download...', 'info');
+      } catch (e) {
+        showToast('Failed to cancel', 'error');
+      }
+    }
+
+    function closeProgressModal() {
+      if (pollInterval) clearInterval(pollInterval);
+      document.getElementById('progressModal').classList.add('hidden');
+    }
+
+    // Folder Actions
+    async function openFolder() {
+      try {
+        const folder = document.getElementById('saveFolderInput').value.trim();
+        const resp = await fetch('/api/open_folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder })
+        });
+        if (resp.ok) showToast('Folder opened on PC', 'success');
+      } catch (e) {
+        showToast('Could not open folder on PC', 'error');
+      }
+    }
+
+    async function browseFolder() {
+      try {
+        const resp = await fetch('/api/browse_folder', { method: 'POST' });
+        const data = await resp.json();
+        if (data.folder) {
+          document.getElementById('saveFolderInput').value = data.folder;
+          showToast('Save location updated', 'success');
+        }
+      } catch (e) {
+        showToast('Folder browser canceled', 'info');
+      }
+    }
+
+    // App Update Checking
+    async function checkForAppUpdates(notifyIfUpToDate = false) {
+      try {
+        const resp = await fetch('/api/app_version');
+        if (!resp.ok) return;
+        const info = await resp.json();
+
+        const currentVersionCode = 1;
+        if (info.version_code > currentVersionCode || notifyIfUpToDate) {
+          document.getElementById('updateVersionBadge').innerText = 'v' + info.version_name;
+          document.getElementById('updateChangelog').innerText = info.changelog || 'Performance updates.';
+          document.getElementById('updateReleaseDate').innerText = info.release_date || 'Latest';
+          document.getElementById('updateModal').classList.remove('hidden');
+        } else if (notifyIfUpToDate) {
+          showToast('App is up to date (v' + info.version_name + ')', 'info');
+        }
+      } catch (e) {
+        if (notifyIfUpToDate) showToast('No updates found', 'info');
+      }
+    }
+
+    function closeUpdateModal() {
+      document.getElementById('updateModal').classList.add('hidden');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // Android App / Mobile detection
+    window.addEventListener('DOMContentLoaded', () => {
+      const isMobileApp = (window.AndroidApp !== undefined) || navigator.userAgent.includes('SmartDownloaderApp');
+      if (isMobileApp) {
+        const tunnelBanner = document.getElementById('tunnelBanner');
+        if (tunnelBanner) tunnelBanner.style.display = 'none';
+        const apkBtn = document.getElementById('apkDownloadBtn');
+        if (apkBtn) apkBtn.style.display = 'none';
+        const openPc = document.getElementById('openPcFolderBtn');
+        if (openPc) openPc.style.display = 'none';
+        const saveRow = document.getElementById('saveLocationRow');
+        if (saveRow) saveRow.style.display = 'none';
+      }
+      // Check for updates on startup
+      setTimeout(() => checkForAppUpdates(false), 1200);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270" fill="none">
+  <rect width="480" height="270" fill="#0f172a"/>
+  <circle cx="240" cy="135" r="40" fill="#1e293b"/>
+  <polygon points="233,120 255,135 233,150" fill="#6366f1"/>
+  <text x="240" y="200" font-family="sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Smart Downloader Video</text>
+</svg>
