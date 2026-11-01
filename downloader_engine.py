@@ -286,6 +286,8 @@ def extract_facebook_page_videos(
                         val = m.group(1).replace(r'\/', '/')
                         if any(x in val for x in ['/reel/', '/videos/', '/watch/', 'fb.watch']):
                             clean_v = val.split('?')[0]
+                            if not clean_v.startswith("http"):
+                                clean_v = "https://www.facebook.com" + ("" if clean_v.startswith("/") else "/") + clean_v
                             if clean_v not in seen_urls and not clean_v.endswith('/videos') and not clean_v.endswith('/reels'):
                                 seen_urls.add(clean_v)
                                 found_urls.append(clean_v)
@@ -309,8 +311,10 @@ def extract_facebook_page_videos(
     videos = []
     for idx, f_url in enumerate(found_urls, 1):
         is_reel = "/reel/" in f_url
+        vid_match = re.search(r'(?:reel|videos|v=|watch\?v=)/?(\d+)', f_url)
+        clean_id = vid_match.group(1) if vid_match else f"fb_{idx}_{int(time.time())}"
         videos.append({
-            "id": f_url,
+            "id": clean_id,
             "url": f_url,
             "title": f"Facebook {'Reel' if is_reel else 'Video'} #{idx}",
             "thumbnail": "/static/default_thumb.svg",
@@ -643,7 +647,7 @@ def ensure_mobile_compatibility(filepath: str) -> str:
 
         temp_dir = os.path.dirname(filepath)
         temp_out = os.path.join(temp_dir, f"__fast_{os.path.basename(filepath)}")
-        cmd = [FFMPEG_PATH, "-y", "-i", filepath]
+        cmd = [FFMPEG_PATH, "-nostdin", "-y", "-i", filepath]
 
         if needs_video_transcode:
             cmd.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p"])
@@ -657,7 +661,7 @@ def ensure_mobile_compatibility(filepath: str) -> str:
 
         cmd.extend(["-movflags", "+faststart", temp_out])
 
-        res = subprocess.run(cmd, capture_output=True)
+        res = subprocess.run(cmd, capture_output=True, timeout=60)
         if res.returncode == 0 and os.path.exists(temp_out) and os.path.getsize(temp_out) > 0:
             os.replace(temp_out, filepath)
         elif os.path.exists(temp_out):
@@ -666,7 +670,7 @@ def ensure_mobile_compatibility(filepath: str) -> str:
             except Exception:
                 pass
     except Exception as e:
-        print(f"⚠ ensure_mobile_compatibility error: {e}")
+        print(f"⚠ ensure_mobile_compatibility notice: {e}")
     return filepath
 
 
@@ -725,6 +729,10 @@ def download_single_video(
         "quiet": True,
         "no_warnings": True,
         "no_color": True,
+        "socket_timeout": 15,
+        "retries": 2,
+        "fragment_retries": 2,
+        "ignoreerrors": True,
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "ios"]

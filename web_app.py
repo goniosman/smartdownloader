@@ -178,6 +178,7 @@ class ScanRequest(BaseModel):
 class DownloadItem(BaseModel):
     url: str
     title: str
+    id: Optional[str] = None
 
 class DownloadBatchRequest(BaseModel):
     items: List[DownloadItem]
@@ -313,13 +314,15 @@ def background_downloader(task_id: str, items: List[Dict[str, str]], quality: st
                 task["message"] = "Download canceled by user."
             break
 
-        vurl = item["url"]
-        vtitle = item.get("title") or "Video"
+        vurl = item.get("url") if isinstance(item, dict) else item.url
+        vtitle = (item.get("title") if isinstance(item, dict) else item.title) or "Video"
+        vid = item.get("id") if isinstance(item, dict) else getattr(item, "id", None)
 
         with tasks_lock:
             task["current_index"] = idx
             task["current_title"] = vtitle
             task["current_url"] = vurl
+            task["current_id"] = vid
             task["current_percent"] = 0
             task["speed_mb"] = 0
             task["status"] = "downloading"
@@ -360,6 +363,8 @@ def background_downloader(task_id: str, items: List[Dict[str, str]], quality: st
                 full_dl_url = f"http://{local_ip}:5000/api/file/{file_id}/{encoded_name}"
                 task["completed_files"].append({
                     "id": file_id,
+                    "video_id": vid,
+                    "url": vurl,
                     "title": vtitle,
                     "filename": fname,
                     "download_url": dl_url,
@@ -368,6 +373,8 @@ def background_downloader(task_id: str, items: List[Dict[str, str]], quality: st
             else:
                 task["failed_count"] += 1
                 task["errors"].append({
+                    "id": vid,
+                    "url": vurl,
                     "title": vtitle,
                     "error": res.get("error", "Error")
                 })
@@ -388,7 +395,7 @@ async def api_start_download(req: DownloadBatchRequest):
     os.makedirs(folder, exist_ok=True)
 
     cancel_event = threading.Event()
-    items_data = [{"url": it.url, "title": it.title} for it in req.items]
+    items_data = [{"url": it.url, "title": it.title, "id": it.id} for it in req.items]
 
     task_info = {
         "task_id": task_id,
@@ -397,6 +404,7 @@ async def api_start_download(req: DownloadBatchRequest):
         "current_index": 0,
         "current_title": "",
         "current_url": "",
+        "current_id": "",
         "current_percent": 0,
         "speed_mb": 0,
         "downloaded_mb": 0,
