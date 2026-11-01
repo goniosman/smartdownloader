@@ -237,11 +237,12 @@
         <div>
           <label class="block text-[11px] font-medium text-slate-400 mb-1">Scan Limit</label>
           <select id="limitSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:ring-1 focus:ring-brand-500">
-            <option value="15">15 Videos</option>
-            <option value="30" selected>30 Videos</option>
+            <option value="0" selected>🚀 All Videos (Full Channel/Page)</option>
+            <option value="30">30 Videos</option>
             <option value="50">50 Videos</option>
             <option value="100">100 Videos</option>
-            <option value="0">All Videos (Unlimited)</option>
+            <option value="250">250 Videos</option>
+            <option value="500">500 Videos</option>
           </select>
         </div>
 
@@ -322,7 +323,7 @@
       <div class="glass-panel rounded-2xl p-3 sm:p-4 flex flex-col md:flex-row items-center justify-between gap-3 md:sticky md:top-20 z-20 shadow-xl border border-slate-700/80">
         
         <!-- Left: Channel Info & Selection Counter -->
-        <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto justify-between md:justify-start">
           <div class="flex items-center gap-2">
             <input
               type="checkbox"
@@ -332,9 +333,33 @@
             />
             <label for="selectAllCheckbox" class="text-xs sm:text-sm font-semibold cursor-pointer select-none">Select All</label>
           </div>
+
+          <!-- Quick Smart Selection Filter Buttons -->
+          <div class="flex items-center gap-1 bg-slate-950/70 p-0.5 rounded-lg border border-slate-800">
+            <button
+              type="button"
+              id="btnSelectNewOnly"
+              onclick="selectOnlyNewVideos()"
+              class="px-2 py-0.5 rounded-md bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-[11px] font-bold transition flex items-center gap-1"
+              title="Select only new videos that haven't been downloaded yet"
+            >
+              <i class="fa-solid fa-sparkles text-[10px]"></i> New Only
+            </button>
+            <button
+              type="button"
+              id="btnSelectAllVideos"
+              onclick="toggleSelectAll(true)"
+              class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold transition"
+              title="Select all videos including already downloaded ones"
+            >
+              All
+            </button>
+          </div>
+
           <div class="h-4 w-px bg-slate-700"></div>
-          <div class="text-xs text-slate-300">
+          <div class="text-xs text-slate-300 flex items-center gap-1">
             <span class="font-bold text-brand-400 text-sm" id="selectedCount">0</span>/<span id="totalFoundCount">0</span> selected
+            <span id="downloadedSkipBadge" class="hidden text-indigo-300 bg-indigo-950/60 border border-indigo-700/50 text-[10px] font-semibold px-1.5 py-0.5 rounded-md ml-1"></span>
           </div>
           <div class="hidden lg:block text-xs text-slate-400 truncate max-w-xs font-medium" id="channelHeaderTitle">
             <!-- Channel title dynamically loaded -->
@@ -700,6 +725,44 @@
       closeSettingsModal();
     }
 
+    // --- Download History Helpers (Persistent in localStorage & Server) ---
+    function getCleanId(url) {
+      if (!url) return '';
+      const m = url.match(/(?:reel|videos|v=|watch\?v=|\bv\/|\/v\/|youtu\.be\/)\/?([a-zA-Z0-9_-]+)/);
+      return m ? m[1] : '';
+    }
+
+    function getLocalHistory() {
+      try {
+        return JSON.parse(localStorage.getItem('smartdownloader_history') || '{}');
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function recordLocalHistory(url, title, id) {
+      const hist = getLocalHistory();
+      const now = new Date().toISOString();
+      if (url) hist[url] = { title, time: now };
+      if (id) hist[id] = { title, time: now };
+      const clean = getCleanId(url);
+      if (clean) hist[clean] = { title, time: now };
+      try {
+        localStorage.setItem('smartdownloader_history', JSON.stringify(hist));
+      } catch (e) {}
+    }
+
+    function checkIsDownloaded(video) {
+      if (video.already_downloaded) return true;
+      const hist = getLocalHistory();
+      if (video.url && hist[video.url]) return true;
+      if (video.id && hist[video.id]) return true;
+      if (video.safeId && hist[video.safeId]) return true;
+      const clean = getCleanId(video.url);
+      if (clean && hist[clean]) return true;
+      return false;
+    }
+
     // 1. Scan Videos API
     async function startScan() {
       const url = document.getElementById('urlInput').value.trim();
@@ -709,7 +772,8 @@
       }
 
       const kind = document.getElementById('kindSelect').value;
-      const limit = parseInt(document.getElementById('limitSelect').value) || 50;
+      const rawLimit = document.getElementById('limitSelect').value;
+      const limit = rawLimit === '0' ? 0 : (parseInt(rawLimit) || 0);
       const cookies = document.getElementById('cookieSelect').value;
 
       document.getElementById('loadingState').classList.remove('hidden');
@@ -737,12 +801,30 @@
         scannedVideos = data.videos;
         selectedVideoIds.clear();
 
-        // Default: select all
-        scannedVideos.forEach(v => selectedVideoIds.add(v.id));
-        document.getElementById('selectAllCheckbox').checked = true;
+        let newCount = 0;
+        let downloadedCount = 0;
+
+        scannedVideos.forEach((v, idx) => {
+          const safeId = getSafeId(v, idx);
+          v.safeId = safeId;
+          v.isDownloaded = checkIsDownloaded(v);
+
+          // By default, select only NEW videos for download
+          if (v.isDownloaded) {
+            downloadedCount++;
+          } else {
+            newCount++;
+            selectedVideoIds.add(safeId);
+          }
+        });
 
         renderVideos(scannedVideos, data.title);
-        showToast(`Found ${scannedVideos.length} videos!`, 'success');
+
+        if (downloadedCount > 0) {
+          showToast(`Found ${scannedVideos.length} videos: ${newCount} new selected, ${downloadedCount} already downloaded skipped.`, 'info');
+        } else {
+          showToast(`Found ${scannedVideos.length} videos!`, 'success');
+        }
       } catch (err) {
         showToast('Scan error: ' + err.message, 'error');
       } finally {
@@ -773,12 +855,11 @@
       document.getElementById('channelHeaderTitle').innerText = title || '';
 
       videos.forEach((video, idx) => {
-        const safeId = getSafeId(video, idx);
+        const safeId = video.safeId || getSafeId(video, idx);
         video.safeId = safeId;
-        const isSelected = selectedVideoIds.has(safeId) || selectedVideoIds.has(video.id);
-        if (isSelected) {
-          selectedVideoIds.add(safeId);
-        }
+        const isDownloaded = video.isDownloaded || checkIsDownloaded(video);
+        video.isDownloaded = isDownloaded;
+        const isSelected = selectedVideoIds.has(safeId);
 
         const card = document.createElement('div');
         card.className = `video-card glass-panel rounded-2xl overflow-hidden border border-slate-800 cursor-pointer relative group flex flex-col justify-between transition duration-200 ${isSelected ? 'selected ring-2 ring-indigo-500 shadow-indigo-500/20 shadow-lg' : ''}`;
@@ -795,6 +876,34 @@
         const durationDisplay = (video.duration_str && video.duration_str !== 'Short')
           ? `<span class="bg-black/85 text-white text-[10px] font-mono font-semibold px-2 py-0.5 rounded shadow">${video.duration_str}</span>`
           : (video.type === 'short' ? '<span class="bg-gradient-to-r from-pink-600 to-rose-600 text-white font-bold text-[10px] px-2 py-0.5 rounded shadow">⚡ Short</span>' : '');
+
+        // Downloaded Status Badge
+        const downloadedBadge = isDownloaded 
+          ? `<div class="absolute top-2.5 right-11 z-10">
+               <span class="bg-indigo-950/95 border border-indigo-400/50 text-indigo-300 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1 backdrop-blur-md">
+                 <i class="fa-solid fa-check-double text-[9px] text-indigo-400"></i> Downloaded
+               </span>
+             </div>`
+          : '';
+
+        // Dynamic Action Button (Download vs Re-download)
+        const actionButtonHtml = isDownloaded
+          ? `<button 
+               onclick="event.stopPropagation(); downloadSingleDirect('${escapeHtml(video.url)}', '${escapeHtml(video.title)}', '${safeId}', true)"
+               class="px-2.5 py-1 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/40 text-[11px] font-semibold flex items-center gap-1.5 transition active:scale-95 shadow"
+               title="Re-download this video"
+             >
+               <i class="fa-solid fa-rotate-right text-[10px]"></i>
+               <span>Re-download</span>
+             </button>`
+          : `<button 
+               onclick="event.stopPropagation(); downloadSingleDirect('${escapeHtml(video.url)}', '${escapeHtml(video.title)}', '${safeId}')"
+               class="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition active:scale-95"
+               title="Download this video"
+             >
+               <i class="fa-solid fa-arrow-down text-[10px]"></i>
+               <span>Download</span>
+             </button>`;
 
         card.innerHTML = `
           <!-- Thumbnail Container -->
@@ -813,6 +922,9 @@
                 <i class="fa-solid fa-check text-xs"></i>
               </div>
             </div>
+
+            <!-- Downloaded Badge -->
+            ${downloadedBadge}
 
             <!-- Duration Badge -->
             <div class="absolute bottom-2.5 right-2.5 flex items-center gap-1 z-10">
@@ -848,14 +960,7 @@
             <div class="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
               <span class="truncate max-w-[110px] sm:max-w-[130px] font-medium">${escapeHtml(video.uploader || 'Creator')}</span>
               <div id="card-action-${safeId}">
-                <button 
-                  onclick="event.stopPropagation(); downloadSingleDirect('${escapeHtml(video.url)}', '${escapeHtml(video.title)}', '${safeId}')"
-                  class="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold flex items-center gap-1 transition active:scale-95"
-                  title="Download this video"
-                >
-                  <i class="fa-solid fa-arrow-down text-[10px]"></i>
-                  <span>Download</span>
-                </button>
+                ${actionButtonHtml}
               </div>
             </div>
           </div>
@@ -865,6 +970,30 @@
 
       updateSelectionUI();
       document.getElementById('resultsSection').classList.remove('hidden');
+    }
+
+    function selectOnlyNewVideos() {
+      selectedVideoIds.clear();
+      scannedVideos.forEach(v => {
+        const sid = v.safeId || v.id;
+        const el = document.getElementById(`card-${sid}`);
+        if (!v.isDownloaded) {
+          selectedVideoIds.add(sid);
+          if (el) {
+            el.classList.add('selected', 'ring-2', 'ring-indigo-500', 'shadow-indigo-500/20', 'shadow-lg');
+            const pill = el.querySelector('.check-pill');
+            if (pill) pill.className = 'check-pill w-7 h-7 rounded-full flex items-center justify-center transition shadow-lg bg-indigo-600 text-white ring-2 ring-indigo-400';
+          }
+        } else {
+          if (el) {
+            el.classList.remove('selected', 'ring-2', 'ring-indigo-500', 'shadow-indigo-500/20', 'shadow-lg');
+            const pill = el.querySelector('.check-pill');
+            if (pill) pill.className = 'check-pill w-7 h-7 rounded-full flex items-center justify-center transition shadow-lg bg-slate-950/70 border border-white/40 text-transparent';
+          }
+        }
+      });
+      updateSelectionUI();
+      showToast('Selected new videos only', 'info');
     }
 
     function getPlatformBadge(platform) {
@@ -949,6 +1078,18 @@
 
       const allCb = document.getElementById('selectAllCheckbox');
       if (allCb) allCb.checked = (count === scannedVideos.length && scannedVideos.length > 0);
+
+      // Check skipped downloaded count
+      const downloadedSkipped = scannedVideos.filter(v => v.isDownloaded && !selectedVideoIds.has(v.safeId || v.id)).length;
+      const skipBadge = document.getElementById('downloadedSkipBadge');
+      if (skipBadge) {
+        if (downloadedSkipped > 0) {
+          skipBadge.classList.remove('hidden');
+          skipBadge.innerHTML = `<i class="fa-solid fa-check-double text-[9px] mr-0.5"></i> ${downloadedSkipped} downloaded skipped`;
+        } else {
+          skipBadge.classList.add('hidden');
+        }
+      }
 
       const dock = document.getElementById('mobileBottomDock');
       if (dock) {
@@ -1191,6 +1332,7 @@
               transferredFileIds.add(fileKey);
               // Save to phone via Android download manager / browser
               saveFileToDevice(f.download_url || f.full_download_url, f.filename);
+              recordLocalHistory(f.url, f.title, f.video_id);
               showToast(`Saved to phone: ${(f.title || f.filename).substring(0, 25)}...`, 'success');
             }
 
@@ -1205,6 +1347,8 @@
             }
             if (completedCardId) {
               updateCardStatus(completedCardId, 'completed', 100, 'Saved', f.download_url || f.full_download_url, f.filename);
+              const vObj = scannedVideos.find(v => (v.safeId === completedCardId || v.id === completedCardId));
+              if (vObj) vObj.isDownloaded = true;
             }
           });
         }

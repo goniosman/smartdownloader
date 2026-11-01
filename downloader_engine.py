@@ -103,8 +103,14 @@ def is_single_video(url: str) -> bool:
     return False
 
 def clean_channel_url(url: str) -> str:
-    url = url.split("?")[0].rstrip("/")
-    return re.sub(r"/(videos|shorts|streams|featured|reels|live)$", "", url, flags=re.IGNORECASE)
+    u = url.strip()
+    if "profile.php" in u and "id=" in u:
+        m = re.search(r'id=(\d+)', u)
+        if m:
+            return f"https://www.facebook.com/profile.php?id={m.group(1)}"
+    # Strip query params and subtabs
+    u = u.split("?")[0].rstrip("/")
+    return re.sub(r"/(videos|shorts|streams|featured|reels|live)$", "", u, flags=re.IGNORECASE)
 
 def extract_all_urls(text: str) -> List[str]:
     return re.findall(r'https?://[^\s"\'<>]+', text)
@@ -262,9 +268,30 @@ def extract_facebook_page_videos(
     limit: Optional[int] = 50,
     log_cb: Optional[Callable[[str], None]] = None
 ) -> List[Dict[str, Any]]:
-    """Scan and list videos and reels from a Facebook Page using Relay GraphQL cache parser."""
+    """Scan and list videos and reels from a Facebook Page or Profile using multi-target and mobile SSR parser."""
     clean_url = clean_channel_url(url)
-    targets = [clean_url + "/videos", clean_url + "/reels", clean_url]
+    targets = []
+    
+    if "profile.php?id=" in clean_url:
+        m = re.search(r'id=(\d+)', clean_url)
+        pid = m.group(1) if m else ""
+        targets = [
+            f"https://m.facebook.com/profile.php?id={pid}&v=videos",
+            f"https://www.facebook.com/profile.php?id={pid}&sk=reels_tab",
+            f"https://www.facebook.com/profile.php?id={pid}&sk=videos",
+            f"https://m.facebook.com/profile.php?id={pid}",
+            f"https://www.facebook.com/profile.php?id={pid}"
+        ]
+    else:
+        m_slug = re.sub(r'^https?://(?:www\.|m\.|web\.)?facebook\.com/', '', clean_url).strip('/')
+        targets = [
+            f"https://m.facebook.com/{m_slug}/videos",
+            f"https://www.facebook.com/{m_slug}/reels",
+            f"https://www.facebook.com/{m_slug}/videos",
+            f"https://m.facebook.com/{m_slug}/reels",
+            f"https://m.facebook.com/{m_slug}",
+            f"https://www.facebook.com/{m_slug}"
+        ]
     
     found_urls = []
     seen_urls = set()
@@ -278,29 +305,49 @@ def extract_facebook_page_videos(
                 resp = curl_cffi.requests.get(target, impersonate="chrome", timeout=12)
                 if resp.status_code != 200:
                     continue
-                text = resp.text
-                scripts = re.findall(r'<script[^>]*>(.*?)</script>', text, re.DOTALL)
-                for s in scripts:
-                    # Match permalink / url patterns
-                    for m in re.finditer(r'"(?:permalink_url|url|share_url)":\s*"([^"]+)"', s):
-                        val = m.group(1).replace(r'\/', '/')
-                        if any(x in val for x in ['/reel/', '/videos/', '/watch/', 'fb.watch']):
-                            clean_v = val.split('?')[0]
-                            if not clean_v.startswith("http"):
-                                clean_v = "https://www.facebook.com" + ("" if clean_v.startswith("/") else "/") + clean_v
-                            if clean_v not in seen_urls and not clean_v.endswith('/videos') and not clean_v.endswith('/reels'):
-                                seen_urls.add(clean_v)
-                                found_urls.append(clean_v)
-                    
-                    # Match video IDs in GraphQL definitions
-                    for m in re.finditer(r'"__typename":"(?:Video|Reel)"[^}]+"id":"(\d+)"', s):
-                        vid = m.group(1)
-                        v_link = f"https://www.facebook.com/watch/?v={vid}"
-                        if v_link not in seen_urls:
-                            seen_urls.add(v_link)
-                            found_urls.append(v_link)
+                # Unescape escaped slashes in Facebook JSON payloads
+                text = resp.text.replace(r'\/', '/')
+
+                # 1. Match video IDs in GraphQL definitions
+                for m in re.finditer(r'"__typename":"(?:Video|Reel)"[^}]+"id":"(\d+)"', text):
+                    vid = m.group(1)
+                    v_link = f"https://www.facebook.com/watch/?v={vid}"
+                    if v_link not in seen_urls:
+                        seen_urls.add(v_link)
+                        found_urls.append(v_link)
+
+                # 2. Match permalink / url patterns
+                for m in re.finditer(r'"(?:permalink_url|url|share_url)":\s*"([^"]+)"', text):
+                    val = m.group(1).split('?')[0]
+                    if any(x in val for x in ['/reel/', '/videos/', '/watch/', 'fb.watch']):
+                        clean_v = val
+                        if not clean_v.startswith("http"):
+                            clean_v = "https://www.facebook.com" + ("" if clean_v.startswith("/") else "/") + clean_v
+                        if clean_v not in seen_urls and not clean_v.endswith('/videos') and not clean_v.endswith('/reels'):
+                            seen_urls.add(clean_v)
+                            found_urls.append(clean_v)
+
+                # 3. Direct Regex on reel and watch patterns
+                for m in re.finditer(r'(?:https?://(?:www\.|m\.)?facebook\.com)?/reel/(\d+)', text):
+                    v_link = f"https://www.facebook.com/reel/{m.group(1)}"
+                    if v_link not in seen_urls:
+                        seen_urls.add(v_link)
+                        found_urls.append(v_link)
+
+                for m in re.finditer(r'(?:https?://(?:www\.|m\.)?facebook\.com)?/watch/\?v=(\d+)', text):
+                    v_link = f"https://www.facebook.com/watch/?v={m.group(1)}"
+                    if v_link not in seen_urls:
+                        seen_urls.add(v_link)
+                        found_urls.append(v_link)
+
+                # 4. JSON video_id and playback_video_id
+                for m in re.finditer(r'"(?:video_id|playback_video_id)":\s*"(\d+)"', text):
+                    v_link = f"https://www.facebook.com/watch/?v={m.group(1)}"
+                    if v_link not in seen_urls:
+                        seen_urls.add(v_link)
+                        found_urls.append(v_link)
                             
-                if limit and len(found_urls) >= limit:
+                if limit and limit > 0 and len(found_urls) >= limit:
                     break
             except Exception:
                 continue
@@ -324,7 +371,7 @@ def extract_facebook_page_videos(
             "platform": "facebook",
             "uploader": "Facebook Creator"
         })
-        if limit and len(videos) >= limit:
+        if limit and limit > 0 and len(videos) >= limit:
             break
             
     return videos
@@ -395,7 +442,7 @@ def scan_channel_or_url(
                 opts = dict(base_opts)
                 opts["extract_flat"] = "in_playlist"
                 opts["skip_download"] = True
-                if limit:
+                if limit and limit > 0:
                     opts["playlistend"] = limit
                 try:
                     with yt_dlp.YoutubeDL(opts) as ydl:
@@ -409,6 +456,8 @@ def scan_channel_or_url(
                                 if item["url"] and item["url"] not in seen:
                                     seen.add(item["url"])
                                     videos.append(item)
+                                    if limit and limit > 0 and len(videos) >= limit:
+                                        break
                 except Exception as ex:
                     if log_cb:
                         log_cb(f"⚠ Playlist error: {ex}")
@@ -426,7 +475,7 @@ def scan_channel_or_url(
                     opts = dict(base_opts)
                     opts["extract_flat"] = "in_playlist"
                     opts["skip_download"] = True
-                    if limit:
+                    if limit and limit > 0:
                         opts["playlistend"] = limit * 2
                     try:
                         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -440,12 +489,12 @@ def scan_channel_or_url(
                                     if item["url"] and item["url"] not in seen:
                                         seen.add(item["url"])
                                         videos.append(item)
-                                        if limit and len(videos) >= limit:
+                                        if limit and limit > 0 and len(videos) >= limit:
                                             break
                     except Exception as ex:
                         if log_cb:
                             log_cb(f"⚠ {tname} fetch error: {ex}")
-                    if limit and len(videos) >= limit:
+                    if limit and limit > 0 and len(videos) >= limit:
                         break
 
         # 3. TikTok Profile
@@ -465,7 +514,7 @@ def scan_channel_or_url(
                 opts = dict(base_opts)
                 opts["extract_flat"] = True
                 opts["skip_download"] = True
-                if limit:
+                if limit and limit > 0:
                     opts["playlistend"] = limit
                 try:
                     with yt_dlp.YoutubeDL(opts) as ydl:
@@ -479,6 +528,8 @@ def scan_channel_or_url(
                                 if item["url"] and item["url"] not in seen:
                                     seen.add(item["url"])
                                     videos.append(item)
+                                    if limit and limit > 0 and len(videos) >= limit:
+                                        break
                 except Exception as ex:
                     if log_cb:
                         log_cb(f"⚠ TikTok profile error: {ex}")
@@ -493,7 +544,7 @@ def scan_channel_or_url(
             opts = dict(base_opts)
             opts["extract_flat"] = True
             opts["skip_download"] = True
-            if limit:
+            if limit and limit > 0:
                 opts["playlistend"] = limit
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
@@ -507,6 +558,8 @@ def scan_channel_or_url(
                             if item["url"] and item["url"] not in seen:
                                 seen.add(item["url"])
                                 videos.append(item)
+                                if limit and limit > 0 and len(videos) >= limit:
+                                    break
             except Exception as ex:
                 if log_cb:
                     log_cb(f"⚠ Bilibili error: {ex}")

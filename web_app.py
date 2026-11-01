@@ -73,6 +73,35 @@ download_tasks: Dict[str, Dict[str, Any]] = {}
 files_lock = threading.Lock()
 completed_files_registry: Dict[str, Dict[str, Any]] = {}
 
+HISTORY_FILE = os.path.join(BASE_DIR, "download_history.json")
+history_lock = threading.Lock()
+
+def load_download_history() -> Dict[str, Any]:
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_download_history(url: str, title: str, video_id: Optional[str] = None):
+    with history_lock:
+        hist = load_download_history()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry = {"title": title, "url": url, "downloaded_at": now_str}
+        hist[url] = entry
+        if video_id:
+            hist[str(video_id)] = entry
+        clean_match = re.search(r'(?:reel|videos|v=|watch\?v=|\bv/|/v/|youtu\.be/)/?([a-zA-Z0-9_-]+)', url)
+        if clean_match:
+            hist[clean_match.group(1)] = entry
+        try:
+            with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(hist, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"⚠ Failed to save history: {e}")
+
 PUBLIC_TUNNEL_URL: Optional[str] = None
 tunnel_process: Optional[subprocess.Popen] = None
 
@@ -296,6 +325,19 @@ async def api_scan(req: ScanRequest):
         log_cb=log_cb
     )
     result["logs"] = scan_logs
+
+    # Annotate videos that have already been downloaded
+    hist = load_download_history()
+    for v in result.get("videos", []):
+        v_url = v.get("url", "")
+        v_id = str(v.get("id", ""))
+        clean_match = re.search(r'(?:reel|videos|v=|watch\?v=|\bv/|/v/|youtu\.be/)/?([a-zA-Z0-9_-]+)', v_url)
+        c_id = clean_match.group(1) if clean_match else ""
+        if v_url in hist or v_id in hist or (c_id and c_id in hist):
+            v["already_downloaded"] = True
+            hist_entry = hist.get(v_url) or hist.get(v_id) or hist.get(c_id) or {}
+            v["downloaded_at"] = hist_entry.get("downloaded_at", "")
+
     return result
 
 
@@ -357,6 +399,8 @@ def background_downloader(task_id: str, items: List[Dict[str, str]], quality: st
                             "filename": fname,
                             "title": vtitle
                         }
+                # Record to persistent download history
+                save_download_history(vurl, vtitle, vid)
                 local_ip = get_local_ip()
                 encoded_name = urllib.parse.quote(fname)
                 dl_url = f"/api/file/{file_id}/{encoded_name}"
@@ -608,6 +652,23 @@ async def api_browse_folder():
         return {"folder": None}
     except Exception:
         return {"folder": None}
+
+
+@app.get("/api/history")
+async def api_get_download_history():
+    hist = load_download_history()
+    return {"history": hist, "count": len(hist)}
+
+
+@app.post("/api/history/clear")
+async def api_clear_download_history():
+    with history_lock:
+        try:
+            if os.path.exists(HISTORY_FILE):
+                os.remove(HISTORY_FILE)
+            return {"status": "cleared"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
